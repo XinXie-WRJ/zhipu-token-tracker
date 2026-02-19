@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智谱AI Token使用量统计工具</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>智谱AI Token 使用量统计工具</h1>
+            <p class="subtitle">筛选资源包: <strong>{{ bundle_name }}</strong></p>
+        </header>
+
+        <!-- 文件上传区域 -->
+        <div class="upload-section">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📁</div>
+                <p>拖拽xlsx文件到此处，或点击选择文件</p>
+                <input type="file" id="fileInput" accept=".xlsx,.xls" hidden>
+                <button class="btn btn-primary" id="selectBtn">选择文件</button>
+            </div>
+            <div class="file-info" id="fileInfo" style="display: none;">
+                <span id="fileName"></span>
+                <button class="btn btn-success" id="analyzeBtn">分析数据</button>
+            </div>
+        </div>
+
+        <!-- 加载中 -->
+        <div class="loading" id="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>正在分析数据...</p>
+        </div>
+
+        <!-- 错误信息 -->
+        <div class="error-message" id="errorMessage" style="display: none;"></div>
+
+        <!-- 结果展示区域 -->
+        <div class="results-section" id="resultsSection" style="display: none;">
+            <!-- 总计信息 -->
+            <div class="summary-card">
+                <h3>总计</h3>
+                <div class="total-tokens">
+                    <span id="grandTotal">0</span>
+                    <span class="unit">tokens</span>
+                </div>
+            </div>
+
+            <!-- 按API Key分组的结果 -->
+            <div id="apiKeysContainer"></div>
+
+            <!-- 导出按钮 -->
+            <div class="export-section">
+                <button class="btn btn-export" id="exportCsvBtn">导出 CSV</button>
+                <button class="btn btn-export" id="exportExcelBtn">导出 Excel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentData = null;
+
+        // DOM元素
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const selectBtn = document.getElementById('selectBtn');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const loading = document.getElementById('loading');
+        const errorMessage = document.getElementById('errorMessage');
+        const resultsSection = document.getElementById('resultsSection');
+        const apiKeysContainer = document.getElementById('apiKeysContainer');
+        const grandTotal = document.getElementById('grandTotal');
+        const exportCsvBtn = document.getElementById('exportCsvBtn');
+        const exportExcelBtn = document.getElementById('exportExcelBtn');
+
+        // 点击选择文件
+        selectBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            fileInput.click();
+        });
+
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // 拖拽事件
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        // 文件选择
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        // 处理文件
+        function handleFile(file) {
+            if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+                showError('请上传Excel文件（.xlsx或.xls）');
+                return;
+            }
+            fileName.textContent = file.name;
+            fileInfo.style.display = 'flex';
+            errorMessage.style.display = 'none';
+            resultsSection.style.display = 'none';
+        }
+
+        // 分析按钮
+        analyzeBtn.addEventListener('click', async () => {
+            const file = fileInput.files[0] || await getFileFromName(fileName.textContent);
+            if (!file) {
+                showError('请重新选择文件');
+                return;
+            }
+            uploadFile(file);
+        });
+
+        // 上传文件
+        async function uploadFile(file) {
+            loading.style.display = 'flex';
+            errorMessage.style.display = 'none';
+            resultsSection.style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                loading.style.display = 'none';
+
+                if (result.success) {
+                    currentData = result;
+                    displayResults(result);
+                } else {
+                    showError(result.error);
+                }
+            } catch (error) {
+                loading.style.display = 'none';
+                showError('上传文件时出错: ' + error.message);
+            }
+        }
+
+        // 显示错误
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+        }
+
+        // 显示结果
+        function displayResults(data) {
+            resultsSection.style.display = 'block';
+            grandTotal.textContent = formatNumber(data.grand_total);
+
+            // 清空容器
+            apiKeysContainer.innerHTML = '';
+
+            // 按API Key显示
+            for (const [apiKey, keyData] of Object.entries(data.data)) {
+                const card = createApiKeyCard(apiKey, keyData, data.dates, data.grand_total);
+                apiKeysContainer.appendChild(card);
+            }
+        }
+
+        // 创建API Key卡片
+        function createApiKeyCard(apiKey, keyData, dates, grandTotal) {
+            const card = document.createElement('div');
+            card.className = 'api-key-card';
+
+            // 计算百分比
+            const percentage = grandTotal > 0 ? ((keyData.total / grandTotal) * 100).toFixed(2) : 0;
+
+            // 标题
+            const header = document.createElement('div');
+            header.className = 'card-header';
+            header.innerHTML = `
+                <h3>API Key: <code>${apiKey}</code></h3>
+                <div class="subtotal">
+                    小计: <strong>${formatNumber(keyData.total)}</strong> tokens
+                    <span class="percentage">(${percentage}%)</span>
+                </div>
+            `;
+            card.appendChild(header);
+
+            // 百分比进度条
+            const progressContainer = document.createElement('div');
+            progressContainer.className = 'progress-container';
+            progressContainer.innerHTML = `
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: ${percentage}%"></div>
+                </div>
+            `;
+            card.appendChild(progressContainer);
+
+            // 表格
+            const table = document.createElement('table');
+            table.className = 'usage-table';
+
+            // 表头
+            const thead = document.createElement('thead');
+            thead.innerHTML = '<tr><th>日期</th><th>模型</th><th>Token使用量</th></tr>';
+            table.appendChild(thead);
+
+            // 表体
+            const tbody = document.createElement('tbody');
+            for (const date of dates) {
+                if (keyData.daily[date]) {
+                    const models = keyData.daily[date];
+                    models.forEach((item, index) => {
+                        const row = document.createElement('tr');
+                        if (index === 0) {
+                            row.innerHTML = `
+                                <td rowspan="${models.length}">${date}</td>
+                                <td>${item.model}</td>
+                                <td>${formatNumber(item.usage)}</td>
+                            `;
+                        } else {
+                            row.innerHTML = `
+                                <td>${item.model}</td>
+                                <td>${formatNumber(item.usage)}</td>
+                            `;
+                        }
+                        tbody.appendChild(row);
+                    });
+                }
+            }
+            table.appendChild(tbody);
+            card.appendChild(table);
+
+            return card;
+        }
+
+        // 格式化数字
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        }
+
+        // 导出CSV
+        exportCsvBtn.addEventListener('click', async () => {
+            if (!currentData) return;
+
+            const response = await fetch('/export/csv', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(currentData)
+            });
+
+            const blob = await response.blob();
+            downloadBlob(blob, `token_usage_${getDateString()}.csv`);
+        });
+
+        // 导出Excel
+        exportExcelBtn.addEventListener('click', async () => {
+            if (!currentData) return;
+
+            const response = await fetch('/export/excel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(currentData)
+            });
+
+            const blob = await response.blob();
+            downloadBlob(blob, `token_usage_${getDateString()}.xlsx`);
+        });
+
+        // 下载文件
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // 获取日期字符串
+        function getDateString() {
+            const now = new Date();
+            return `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}`;
+        }
+    </script>
+</body>
+</html>
