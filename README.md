@@ -87,8 +87,7 @@ zhipu-token-tracker/
 ```
 
 ## 截图
-
-（此处可添加应用截图）
+<img width="1619" height="2402" alt="fae1d99daddb86ced527cbea426c7784" src="https://github.com/user-attachments/assets/c0763809-e0a9-44b9-9911-9668b53675ed" />
 
 ## 许可证
 
