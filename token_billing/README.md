@@ -58,11 +58,13 @@ python app.py
 
 ## 使用方法
 
-1. 从智谱AI 控制台下载 Token 使用账单（Excel 格式）
-2. 在网页中拖拽或点击上传 Excel 文件
-3. 点击「分析数据」按钮
-4. 查看按 API Key 分组的 Token 使用统计
-5. 可选：导出 CSV 或 Excel 格式的报表
+1. 进入 https://bigmodel.cn/finance-center/bill/expensebill/list
+2. 点击费用明细，按天\按明细选择按明细，点击导出数据
+3. 在左侧导出记录中下载数据Excel文件
+4. 在网页中拖拽或点击上传 Excel 文件
+5. 点击「分析数据」按钮
+6. 查看按 API Key 分组的 Token 使用统计
+7. 可选：导出 CSV 或 Excel 格式的报表
 
 ## 数据筛选
 
